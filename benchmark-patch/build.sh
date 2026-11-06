@@ -18,9 +18,9 @@ IMAGE="${IMAGE:-syson-benchmark:v2026.9.6-bp1}"
 JAVAC="${JAVAC:-javac}"
 WORK="$HERE/.build"
 
-# module source root -> nested jar name prefix
+# source root : nested jar name prefix : space-separated source files (relative to the root)
 PATCHED_SOURCES=(
-  "backend/services/syson-sysml-metamodel-services/src/main/java:syson-sysml-metamodel-services:org/eclipse/syson/sysml/metamodel/services/textual/SysMLElementSerializer.java"
+  "backend/services/syson-sysml-metamodel-services/src/main/java:syson-sysml-metamodel-services:org/eclipse/syson/sysml/metamodel/services/textual/SysMLElementSerializer.java org/eclipse/syson/sysml/metamodel/services/textual/utils/SysMLKeywordSwitch.java"
 )
 
 rm -rf "$WORK" && mkdir -p "$WORK/app"
@@ -32,10 +32,12 @@ CP="$(ls "$WORK"/app/BOOT-INF/lib/*.jar | tr '\n' ':')"
 
 patched_jars=()
 for entry in "${PATCHED_SOURCES[@]}"; do
-  IFS=: read -r src_root jar_prefix file <<<"$entry"
+  IFS=: read -r src_root jar_prefix files <<<"$entry"
   out="$WORK/classes/$jar_prefix"
   mkdir -p "$out"
-  "$JAVAC" -nowarn -XDsuppressNotes --release 21 -d "$out" -cp "$CP" "$REPO/$src_root/$file"
+  srcs=()
+  for f in $files; do srcs+=("$REPO/$src_root/$f"); done
+  "$JAVAC" -nowarn -XDsuppressNotes --release 21 -d "$out" -cp "$CP" "${srcs[@]}"
   jar_path="$(ls "$WORK"/app/BOOT-INF/lib/"$jar_prefix"-[0-9]*.jar)"
   (cd "$out" && zip -q -r "$jar_path" .)
   patched_jars+=("BOOT-INF/lib/$(basename "$jar_path")")

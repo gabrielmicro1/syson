@@ -5,5 +5,5 @@ attribute powerMargin : PowerValue = PowerMargin\(availablePower, loadPower\);
 bind telemetryOut = ('1\.4'|controller)\.telemetryOut;
 expose PartsTree::station::\*\*;
 doc /\* Shared pattern: the subject's mass shall not exceed a limit\. \*/
-entry;\s*then normal;
+entry ?;\s*then normal;
 accept when stateOfCharge < lowPowerThreshold

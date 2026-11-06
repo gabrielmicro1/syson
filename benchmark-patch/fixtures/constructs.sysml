@@ -17,6 +17,15 @@ package Variants {
         calc k : A { in x = 1 [W]; in y = 2 [W]; }
         attribute v2 : PowerValue = k.r;
     }
+    part sm {
+        part <'X-1'> dev : P;
+        exhibit state s {
+            entry; then a;
+            state a;
+            state b;
+            transition t first a accept when dev.w > 1 [W] then b;
+        }
+    }
     package V {
         view v1 : StandardViewDefinitions::GeneralView { expose outer::**; }
         view v2 : StandardViewDefinitions::GeneralView { expose outer::*; }

@@ -10,3 +10,5 @@ attribute v : PowerValue = A\(1 \[W\], 2 \[W\]\);
 expose outer::\*\*;
 expose outer::\*;
 doc /\* It's a test of the doc's apostrophes\. \*/
+entry ?;\s*then a;
+accept when ('X-1'|dev)\.w > 1 \[W\] then b;

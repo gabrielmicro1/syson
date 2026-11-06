@@ -42,7 +42,9 @@ import org.eclipse.syson.sysml.AssertConstraintUsage;
 import org.eclipse.syson.sysml.AssignmentActionUsage;
 import org.eclipse.syson.sysml.AttributeDefinition;
 import org.eclipse.syson.sysml.AttributeUsage;
+import org.eclipse.syson.sysml.BindingConnectorAsUsage;
 import org.eclipse.syson.sysml.CalculationDefinition;
+import org.eclipse.syson.sysml.CalculationUsage;
 import org.eclipse.syson.sysml.Classifier;
 import org.eclipse.syson.sysml.CollectExpression;
 import org.eclipse.syson.sysml.Comment;
@@ -131,6 +133,7 @@ import org.eclipse.syson.sysml.SendActionUsage;
 import org.eclipse.syson.sysml.Specialization;
 import org.eclipse.syson.sysml.StakeholderMembership;
 import org.eclipse.syson.sysml.StateDefinition;
+import org.eclipse.syson.sysml.StateSubactionKind;
 import org.eclipse.syson.sysml.StateSubactionMembership;
 import org.eclipse.syson.sysml.StateUsage;
 import org.eclipse.syson.sysml.Subclassification;
@@ -361,9 +364,71 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
     }
 
     @Override
+    public String caseBindingConnectorAsUsage(BindingConnectorAsUsage bindingConnector) {
+        // BindingConnectorAsUsage = UsagePrefix ( 'binding' UsageDeclaration )?
+        //     'bind' ConnectorEndMember '=' ConnectorEndMember UsageBody
+        Appender builder = this.newAppender();
+
+        this.appendUsagePrefix(builder, bindingConnector);
+
+        Appender declarationBuilder = this.newAppender();
+        this.appendUsageDeclaration(declarationBuilder, bindingConnector);
+        if (!declarationBuilder.isEmpty()) {
+            builder.appendWithSpaceIfNeeded("binding");
+            builder.appendWithSpaceIfNeeded(declarationBuilder);
+        }
+
+        List<EndFeatureMembership> ends = bindingConnector.getOwnedRelationship().stream()
+                .filter(EndFeatureMembership.class::isInstance)
+                .map(EndFeatureMembership.class::cast)
+                .toList();
+        if (ends.size() == 2) {
+            Appender endsBuilder = this.newAppender();
+            this.appendConnectorEndMember(endsBuilder, ends.get(0));
+            endsBuilder.append(" = ");
+            this.appendConnectorEndMember(endsBuilder, ends.get(1));
+            builder.appendWithSpaceIfNeeded("bind");
+            builder.appendWithSpaceIfNeeded(endsBuilder);
+        }
+        this.childrenMembershipToSkip.addAll(ends);
+
+        List<Membership> contentMemberships = bindingConnector.getOwnedMembership().stream()
+                .filter(this.relationPredicates.isDefinitionBodyItemMember())
+                .filter(membership -> !ends.contains(membership))
+                .toList();
+        this.appendChildrenContent(builder, bindingConnector, contentMemberships);
+
+        return builder.toString();
+    }
+
+    @Override
     public String caseCalculationDefinition(CalculationDefinition calculationDefinition) {
-        this.reportUnhandledType(calculationDefinition);
-        return "";
+        Appender builder = this.newAppender();
+
+        this.appendDefinitionPrefix(builder, calculationDefinition);
+
+        builder.appendSpaceIfNeeded().append(this.getDefinitionKeyword(calculationDefinition));
+
+        this.appendDefinitionDeclaration(builder, calculationDefinition);
+
+        this.appendChildrenContent(builder, calculationDefinition, calculationDefinition.getOwnedMembership());
+
+        return builder.toString();
+    }
+
+    @Override
+    public String caseCalculationUsage(CalculationUsage calculationUsage) {
+        Appender builder = this.newAppender();
+
+        this.appendOccurrenceUsagePrefix(builder, calculationUsage);
+
+        builder.appendSpaceIfNeeded().append(this.getUsageKeyword(calculationUsage));
+
+        this.appendCalculationUsageDeclaration(builder, calculationUsage);
+
+        this.appendChildrenContent(builder, calculationUsage, calculationUsage.getOwnedMembership());
+
+        return builder.toString();
     }
 
     @Override
@@ -654,7 +719,8 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
     public String caseInvocationExpression(InvocationExpression expression) {
         Appender builder = this.newAppender();
         List<Relationship> relationships = expression.getOwnedRelationship();
-        if (!relationships.isEmpty() && (relationships.get(0) instanceof FeatureTyping || relationships.get(0) instanceof Subsetting)) {
+        // The invoked type may follow the argument ParameterMemberships (e.g. after a textual import)
+        if (relationships.stream().anyMatch(relationship -> relationship instanceof FeatureTyping || relationship instanceof Subsetting)) {
             relationships.stream()
                     .filter(Specialization.class::isInstance)
                     .map(Specialization.class::cast)
@@ -1377,6 +1443,16 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
         var builder = this.newAppender();
         if (this.isDecisionTransition(transitionUsage)) {
             this.appendDecisionTransition(transitionUsage, builder);
+        } else if (this.isEntryTransition(transitionUsage)) {
+            // EntryTransitionMember = 'then' TransitionSuccession ';' (the source is the entry action)
+            transitionUsage.getOwnedMembership().stream().findFirst().ifPresent(this.childrenMembershipToSkip::add);
+            builder.append(SysMLv2Keywords.THEN).append(SPACE);
+            transitionUsage.getOwnedMembership().stream()
+                    .filter(OwningMembership.class::isInstance)
+                    .filter(membership -> membership.getOwnedRelatedElement().stream().anyMatch(Succession.class::isInstance))
+                    .findFirst()
+                    .ifPresent(membership -> this.appendTransitionSuccessionMember(builder, membership));
+            builder.append(";");
         } else {
             builder.append(SysMLv2Keywords.TRANSITION);
 
@@ -1434,6 +1510,22 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
 
         }
         return builder.toString();
+    }
+
+    private boolean isEntryTransition(TransitionUsage transitionUsage) {
+        if (transitionUsage.getDeclaredName() != null || transitionUsage.getDeclaredShortName() != null) {
+            return false;
+        }
+        boolean hasTriggerGuardOrEffect = transitionUsage.getOwnedMembership().stream().anyMatch(TransitionFeatureMembership.class::isInstance);
+        return !hasTriggerGuardOrEffect && transitionUsage.getOwnedMembership().stream()
+                .findFirst()
+                .map(Membership::getMemberElement)
+                .filter(ActionUsage.class::isInstance)
+                .map(Element::getOwningRelationship)
+                .filter(StateSubactionMembership.class::isInstance)
+                .map(StateSubactionMembership.class::cast)
+                .filter(stateSubactionMembership -> stateSubactionMembership.getKind() == StateSubactionKind.ENTRY)
+                .isPresent();
     }
 
     private void appendTransitionSuccessionMember(Appender builder, Membership membership) {
@@ -2400,12 +2492,11 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
     private void appendNamespaceExpose(Appender builder, NamespaceExpose namespaceExpose) {
         Namespace exposeedNamespace = namespaceExpose.getImportedNamespace();
         if (exposeedNamespace != null) {
-            builder.appendSpaceIfNeeded().append(this.buildImportContextRelativeQualifiedName(exposeedNamespace, namespaceExpose)).append("::");
+            // NamespaceExpose = QualifiedName '::' '*' ( '::' '**' )?
+            builder.appendSpaceIfNeeded().append(this.buildImportContextRelativeQualifiedName(exposeedNamespace, namespaceExpose)).append("::*");
         }
-        if (namespaceExpose.isIsImportAll()) {
-            builder.append("*");
-        } else if (namespaceExpose.isIsRecursive()) {
-            builder.append("**");
+        if (namespaceExpose.isIsRecursive()) {
+            builder.append("::**");
         }
     }
 
@@ -2416,6 +2507,10 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
                     .map(e -> this.buildImportContextRelativeQualifiedName(e, membershipExpose)).orElse("");
 
             builder.appendSpaceIfNeeded().append(qnName);
+        }
+        // MembershipExpose = QualifiedName ( '::' '**' )?
+        if (membershipExpose.isIsRecursive()) {
+            builder.append("::**");
         }
     }
 
