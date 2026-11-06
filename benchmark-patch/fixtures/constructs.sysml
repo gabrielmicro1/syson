@@ -6,7 +6,7 @@ package Variants {
     calc def A { in x : PowerValue; in y : PowerValue; return r : PowerValue = x - y; }
     calc def B { in x : PowerValue; return : PowerValue; }
     calc def C { doc /* c */ in x : Real; return r : Real; }
-    calc def D { in x : Real; x * 2 }
+    calc def D { in x : Real; return : Real = x * 2; }
     part def P { port p : Q; port q : Q; attribute w : PowerValue; }
     port def Q;
     part outer : P {

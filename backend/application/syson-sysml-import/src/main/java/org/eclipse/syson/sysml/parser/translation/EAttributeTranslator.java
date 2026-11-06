@@ -117,7 +117,8 @@ public class EAttributeTranslator {
         Object forcedValue;
         this.matchingAttribute = this.getAttribute(ownerType, astFeatureName).orElse(null);
         // This does not properly handle multiline comment
-        forcedValue = this.asCleanedText(astValue).replaceFirst("^/\\*", "").replaceFirst("\\*/", "").trim();
+        // Comment bodies are free text: keep their single quotes (only names are quoted with them)
+        forcedValue = this.asRawText(astValue).replaceFirst("^/\\*", "").replaceFirst("\\*/", "").trim();
         return forcedValue;
     }
 
@@ -235,6 +236,14 @@ public class EAttributeTranslator {
         return Optional.empty();
     }
 
+
+    private String asRawText(final JsonNode node) {
+        String result = null;
+        if (node.isString() || node.isNumber()) {
+            result = node.asString();
+        }
+        return result;
+    }
 
     private String asCleanedText(final JsonNode node) {
         String result = null;

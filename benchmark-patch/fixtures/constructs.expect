@@ -3,6 +3,7 @@ calc def A \{
 calc def B \{
 calc def C \{
 calc def D \{
+return : Real = x \* 2;
 return r : PowerValue = x - y;
 bind p = inner\.p;
 calc k : A \{
