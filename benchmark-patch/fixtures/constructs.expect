@@ -1,0 +1,12 @@
+# One regular expression per line; each must match the exported text.
+calc def A \{
+calc def B \{
+calc def C \{
+calc def D \{
+return r : PowerValue = x - y;
+bind p = inner\.p;
+calc k : A \{
+attribute v : PowerValue = A\(1 \[W\], 2 \[W\]\);
+expose outer::\*\*;
+expose outer::\*;
+doc /\* It's a test of the doc's apostrophes\. \*/
