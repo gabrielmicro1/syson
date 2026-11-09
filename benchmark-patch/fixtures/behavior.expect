@@ -1,0 +1,16 @@
+# One regular expression per line; each must match the exported text.
+return : Real = \(if a >= b \? a else b\) / \(a \+ b\);
+attribute share : Real = if stateOfCharge > 0\.5 \? 1\.0 else 0\.0;
+item notice : Notice \{
+send notice via obcLink;
+loop action heaterCycle \{
+assign enabled := true;
+send notice2 via obcLink;
+attribute sumOverC : Real = \(a \+ b\) / c;
+attribute diffOfDiff : Real = a - \(b - c\);
+attribute negSum : Real = -\(a \+ b\);
+attribute powOfPow : Real = \(a \*\* b\) \*\* c;
+attribute mixed : Real = a \* b \+ c;
+attribute chained : Real = a \+ b \+ c;
+attribute guarded : Boolean = a > b and \(b > c or c > a\);
+attribute second : Boolean = flags#\(2\) and not flags#\(3\);

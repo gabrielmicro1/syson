@@ -44,6 +44,7 @@ import org.eclipse.syson.sysml.AttributeDefinition;
 import org.eclipse.syson.sysml.AttributeUsage;
 import org.eclipse.syson.sysml.BindingConnectorAsUsage;
 import org.eclipse.syson.sysml.CalculationDefinition;
+import org.eclipse.syson.sysml.WhileLoopActionUsage;
 import org.eclipse.syson.sysml.CalculationUsage;
 import org.eclipse.syson.sysml.Classifier;
 import org.eclipse.syson.sysml.CollectExpression;
@@ -65,6 +66,7 @@ import org.eclipse.syson.sysml.EventOccurrenceUsage;
 import org.eclipse.syson.sysml.ExhibitStateUsage;
 import org.eclipse.syson.sysml.Expose;
 import org.eclipse.syson.sysml.Expression;
+import org.eclipse.syson.sysml.IndexExpression;
 import org.eclipse.syson.sysml.Feature;
 import org.eclipse.syson.sysml.FeatureChainExpression;
 import org.eclipse.syson.sysml.FeatureChaining;
@@ -399,6 +401,72 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
         this.appendChildrenContent(builder, bindingConnector, contentMemberships);
 
         return builder.toString();
+    }
+
+    @Override
+    public String caseWhileLoopActionUsage(WhileLoopActionUsage loopActionUsage) {
+        // WhileLoopNode = ActionNodePrefix ( 'while' ExpressionParameterMember | 'loop' EmptyParameterMember )
+        //     ActionBodyParameterMember ( 'until' ExpressionParameterMember ';' )?
+        Appender builder = this.newAppender();
+        this.appendOccurrenceUsagePrefix(builder, loopActionUsage);
+
+        Appender declarationBuilder = this.newAppender();
+        this.appendUsageDeclaration(declarationBuilder, loopActionUsage);
+        if (!declarationBuilder.isEmpty()) {
+            builder.appendWithSpaceIfNeeded(SysMLv2Keywords.ACTION).appendWithSpaceIfNeeded(declarationBuilder);
+        }
+
+        // The parameters are found by kind: their order varies after a textual import
+        List<ParameterMembership> parameters = loopActionUsage.getOwnedRelationship().stream()
+                .filter(ParameterMembership.class::isInstance)
+                .map(ParameterMembership.class::cast)
+                .toList();
+        this.childrenMembershipToSkip.addAll(parameters);
+        ActionUsage body = parameters.stream()
+                .map(ParameterMembership::getOwnedMemberParameter)
+                .filter(ActionUsage.class::isInstance)
+                .filter(parameter -> !(parameter instanceof Expression))
+                .map(ActionUsage.class::cast)
+                .findFirst()
+                .orElse(null);
+        List<Expression> conditions = parameters.stream()
+                .map(ParameterMembership::getOwnedMemberParameter)
+                .filter(Expression.class::isInstance)
+                .map(Expression.class::cast)
+                .toList();
+
+        if (conditions.isEmpty()) {
+            builder.appendWithSpaceIfNeeded("loop");
+        } else {
+            builder.appendWithSpaceIfNeeded("while").appendWithSpaceIfNeeded(this.doSwitch(conditions.get(0)));
+        }
+
+        if (body != null) {
+            builder.appendWithSpaceIfNeeded(SysMLv2Keywords.ACTION);
+            Appender bodyDeclarationBuilder = this.newAppender();
+            this.appendUsageDeclaration(bodyDeclarationBuilder, body);
+            if (!bodyDeclarationBuilder.isEmpty()) {
+                builder.appendWithSpaceIfNeeded(bodyDeclarationBuilder);
+            }
+            Appender bodyBuilder = this.newAppender();
+            this.appendChildrenContent(bodyBuilder, body, body.getOwnedMembership());
+            builder.append(";".equals(bodyBuilder.toString()) ? " { }" : bodyBuilder.toString());
+        } else {
+            builder.append(" { }");
+        }
+
+        if (conditions.size() >= 2) {
+            builder.appendWithSpaceIfNeeded("until").appendWithSpaceIfNeeded(this.doSwitch(conditions.get(1))).append(";");
+        }
+
+        return builder.toString();
+    }
+
+    @Override
+    public String caseIndexExpression(IndexExpression indexExpression) {
+        Appender builder = this.newAppender();
+        this.appendIndexExpression(builder, indexExpression);
+        return builder.toString().trim();
     }
 
     @Override
@@ -935,7 +1003,7 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
         }
         switch (operator) {
             case "if":
-                this.reportConsumer.accept(Status.warning("ConditionalExpression are not handled yet ({0})", op.getElementId()));
+                this.appendConditionalExpression(builder, op);
                 break;
             case "|":
             case "&":
@@ -973,7 +1041,7 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
                 this.appendBracketExpression(builder, op);
                 break;
             case "#":
-                this.reportConsumer.accept(Status.warning("IndexExpression are not handled yet ({0})", op.getElementId()));
+                this.appendIndexExpression(builder, op);
                 break;
             case ",":
                 this.appendSequenceExpression(builder, op);
@@ -1164,6 +1232,15 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
 
     @Override
     public String caseSendActionUsage(SendActionUsage sendActionUsage) {
+        // SendNode = OccurrenceUsagePrefix ActionNodeUsageDeclaration? 'send' ... ActionBody
+        Appender builder = this.newAppender();
+        this.appendOccurrenceUsagePrefix(builder, sendActionUsage);
+        builder.appendWithSpaceIfNeeded(this.serializeSendNode(sendActionUsage));
+        this.appendChildrenContent(builder, sendActionUsage, sendActionUsage.getOwnedMembership());
+        return builder.toString();
+    }
+
+    private String serializeSendNode(SendActionUsage sendActionUsage) {
         var builder = this.newAppender();
 
         Appender localAppender = this.newAppender();
@@ -1559,7 +1636,7 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
                     } else if (actionUsage instanceof PerformActionUsage performActionUsage) {
                         this.appendPerformActionUsageDeclaration(builder, performActionUsage);
                     } else if (actionUsage instanceof SendActionUsage sendActionUsage) {
-                        builder.appendWithSpaceIfNeeded(this.caseSendActionUsage(sendActionUsage));
+                        builder.appendWithSpaceIfNeeded(this.serializeSendNode(sendActionUsage));
                     } else if (actionUsage instanceof AssignmentActionUsage assignmentActionUsage) {
                         this.appendAssignmentNodeDeclaration(builder, assignmentActionUsage);
                     }
@@ -1721,12 +1798,47 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
         }
     }
 
+    private void appendIndexExpression(Appender builder, OperatorExpression op) {
+        // IndexExpression = PrimaryExpression '#' '(' SequenceExpression ')'
+        List<ParameterMembership> parameters = op.getOwnedRelationship().stream()
+                .filter(ParameterMembership.class::isInstance)
+                .map(ParameterMembership.class::cast)
+                .toList();
+        if (parameters.size() == 2) {
+            this.appendOperand(builder, parameters.get(0), Integer.MAX_VALUE, false, false);
+            Appender indexBuilder = this.newAppender();
+            this.appendArgumentMember(indexBuilder, parameters.get(1));
+            builder.append("#").append(LabelConstants.OPEN_PARENTHESIS).append(indexBuilder.toString().trim()).append(LabelConstants.CLOSE_PARENTHESIS);
+        } else {
+            this.reportConsumer.accept(Status.warning("IndexExpression without two arguments ({0})", op.getElementId()));
+        }
+    }
+
+    private void appendConditionalExpression(Appender builder, OperatorExpression op) {
+        // ConditionalExpression = 'if' ArgumentMember '?' ArgumentExpressionMember 'else' ArgumentExpressionMember
+        List<ParameterMembership> parameters = op.getOwnedRelationship().stream()
+                .filter(ParameterMembership.class::isInstance)
+                .map(ParameterMembership.class::cast)
+                .toList();
+        if (parameters.size() == 3) {
+            builder.appendSpaceIfNeeded().append(SysMLv2Keywords.IF);
+            this.appendArgumentMember(builder, parameters.get(0));
+            builder.appendSpaceIfNeeded().append("?");
+            this.appendArgumentExpressionMember(builder, parameters.get(1));
+            builder.appendSpaceIfNeeded().append("else");
+            this.appendArgumentExpressionMember(builder, parameters.get(2));
+        } else {
+            this.reportConsumer.accept(Status.warning("ConditionalExpression without three arguments ({0})", op.getElementId()));
+        }
+    }
+
     private void appendConditionalBinaryOperatorExpression(Appender builder, OperatorExpression op) {
+        int precedence = this.getOperatorPrecedence(op);
         op.getOwnedRelationship().stream()
                 .filter(ParameterMembership.class::isInstance)
                 .map(ParameterMembership.class::cast)
                 .findFirst()
-                .ifPresent(param -> this.appendArgumentMember(builder, param));
+                .ifPresent(param -> this.appendOperand(builder, param, precedence, false, false));
 
         builder.appendSpaceIfNeeded().append(op.getOperator());
 
@@ -1735,7 +1847,7 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
                 .map(ParameterMembership.class::cast)
                 .skip(1)
                 .findFirst()
-                .ifPresent(param -> this.appendArgumentExpressionMember(builder, param));
+                .ifPresent(param -> this.appendOperand(builder, param, precedence, true, true));
     }
 
     private void appendArgumentExpressionMember(Appender builder, ParameterMembership param) {
@@ -2156,7 +2268,9 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
     }
 
     private void appendOwnedExpression(Appender builder, Expression expression) {
-        if (expression instanceof OperatorExpression op && op.getOperator() != null) {
+        if (expression instanceof IndexExpression indexExpression) {
+            builder.appendSpaceIfNeeded().append(this.caseIndexExpression(indexExpression));
+        } else if (expression instanceof OperatorExpression op && op.getOperator() != null) {
             builder.appendSpaceIfNeeded().append(this.caseOperatorExpression(op));
         } else {
             this.appendPrimaryExpression(builder, expression);
@@ -2305,7 +2419,7 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
                 .findFirst()
                 .ifPresent(param -> {
                     Appender localBuilder = this.newAppender();
-                    this.appendArgumentMember(localBuilder, param);
+                    this.appendOperand(localBuilder, param, this.getOperatorPrecedence(expression), true, false);
                     if ("not".equals(expression.getOperator())) {
                         // Keep heading space
                         builder.appendWithSpaceIfNeeded(localBuilder.toString().trim());
@@ -2322,12 +2436,81 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
                 .filter(ParameterMembership.class::isInstance)
                 .map(ParameterMembership.class::cast).toList().iterator();
 
+        int precedence = this.getOperatorPrecedence(expression);
         if (iterator.hasNext()) {
-            this.appendArgumentMember(builder, iterator.next());
+            this.appendOperand(builder, iterator.next(), precedence, false, false);
         }
         builder.appendSpaceIfNeeded().append(expression.getOperator());
         while (iterator.hasNext()) {
-            this.appendArgumentMember(builder, iterator.next());
+            this.appendOperand(builder, iterator.next(), precedence, true, false);
+        }
+    }
+
+    /**
+     * Precedence of an operator expression, from the KerML expression grammar (higher binds tighter).
+     */
+    private int getOperatorPrecedence(Expression expression) {
+        if (!(expression instanceof OperatorExpression op) || op.getOperator() == null || expression instanceof FeatureChainExpression) {
+            return Integer.MAX_VALUE;
+        }
+        long argumentCount = op.getOwnedRelationship().stream().filter(ParameterMembership.class::isInstance).count();
+        return switch (op.getOperator()) {
+            case "if" -> 1;
+            case "??" -> 2;
+            case "implies" -> 3;
+            case "or", "|" -> 4;
+            case "xor" -> 5;
+            case "and", "&" -> 6;
+            case "==", "!=", "===", "!==" -> 7;
+            case "istype", "hastype", "@", "as", "meta" -> 8;
+            case "<", ">", "<=", ">=" -> 9;
+            case ".." -> 10;
+            case "+", "-" -> argumentCount < 2 ? 14 : 11;
+            case "*", "/", "%" -> 12;
+            case "**", "^" -> 13;
+            case "not", LabelConstants.CONJUGATED -> 14;
+            default -> Integer.MAX_VALUE;
+        };
+    }
+
+    /**
+     * Appends an operand of an operator expression, in parentheses when its own operator binds less tightly than the
+     * parent's (or equally, on the side where the parent operator does not associate).
+     */
+    private void appendOperand(Appender builder, ParameterMembership param, int parentPrecedence, boolean rightOperand, boolean expressionReference) {
+        Feature parameter = param.getOwnedMemberParameter();
+        Expression operand = null;
+        if (parameter != null) {
+            FeatureValue featureValue = this.getValuation(parameter);
+            if (featureValue != null) {
+                operand = featureValue.getValue();
+                if (expressionReference && operand instanceof FeatureReferenceExpression featureReference) {
+                    operand = featureReference.getOwnedRelationship().stream()
+                            .filter(FeatureMembership.class::isInstance)
+                            .map(FeatureMembership.class::cast)
+                            .map(FeatureMembership::getOwnedMemberFeature)
+                            .filter(Expression.class::isInstance)
+                            .map(Expression.class::cast)
+                            .findFirst()
+                            .orElse(operand);
+                }
+            }
+        }
+        int operandPrecedence = this.getOperatorPrecedence(operand);
+        boolean rightAssociative = parentPrecedence == 13;
+        boolean needsParentheses = operandPrecedence < parentPrecedence
+                || (operandPrecedence == parentPrecedence && operandPrecedence != Integer.MAX_VALUE && rightOperand != rightAssociative);
+
+        Appender operandBuilder = this.newAppender();
+        if (expressionReference) {
+            this.appendArgumentExpressionMember(operandBuilder, param);
+        } else {
+            this.appendArgumentMember(operandBuilder, param);
+        }
+        if (needsParentheses) {
+            builder.appendSpaceIfNeeded().append(LabelConstants.OPEN_PARENTHESIS).append(operandBuilder.toString().trim()).append(LabelConstants.CLOSE_PARENTHESIS);
+        } else if (!operandBuilder.toString().isBlank()) {
+            builder.appendSpaceIfNeeded().append(operandBuilder.toString().trim());
         }
     }
 
@@ -3293,35 +3476,53 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
     }
 
     private void appendAssignmentNodeDeclaration(Appender builder, AssignmentActionUsage assignmentActionUsage) {
-
+        // AssignmentNodeDeclaration = ( 'action' UsageDeclaration )? 'assign'
+        //     ( AssignmentTargetMember '.' )? FeatureChainMember ':=' NodeParameterMember
         Appender declarationBuilder = this.newAppender();
         this.appendActionUsageDeclaration(declarationBuilder, assignmentActionUsage);
         if (!declarationBuilder.isEmpty()) {
-            builder.append(declarationBuilder);
+            builder.appendWithSpaceIfNeeded(SysMLv2Keywords.ACTION).appendWithSpaceIfNeeded(declarationBuilder);
         }
 
         builder.appendWithSpaceIfNeeded(SysMLv2Keywords.ASSIGN);
 
+        // The members are found by kind: a textual import may omit the empty target parameter
         EList<Membership> ownedMembership = assignmentActionUsage.getOwnedMembership();
-        this.appendAssignmentTargetMember(builder, ownedMembership);
+        List<ParameterMembership> parameters = ownedMembership.stream()
+                .filter(ParameterMembership.class::isInstance)
+                .map(ParameterMembership.class::cast)
+                .toList();
+        Membership referentMembership = ownedMembership.stream()
+                .filter(membership -> !(membership instanceof ParameterMembership))
+                .filter(membership -> membership.getMemberElement() instanceof Feature)
+                .findFirst()
+                .orElse(null);
+        this.childrenMembershipToSkip.addAll(parameters);
 
-        // Append feature chain member
-        if (ownedMembership.size() >= 2) {
-            Membership secondMembership = ownedMembership.get(1);
-
-            this.childrenMembershipToSkip.add(secondMembership);
-            this.appendFeatureChainMember(builder, secondMembership);
-            builder.appendWithSpaceIfNeeded(SysMLv2Keywords.ASSIGNMENT);
-        }
-
-        if (ownedMembership.size() >= 3) {
-            Membership thirdMembership = ownedMembership.get(2);
-            this.childrenMembershipToSkip.add(thirdMembership);
-            if (thirdMembership instanceof ParameterMembership parameterMembership && parameterMembership.getOwnedMemberElement() instanceof ReferenceUsage thirdFeature) {
-                FeatureValue value = this.getValuation(thirdFeature);
-                if (value != null) {
-                    this.appendOwnedExpression(builder, value.getValue());
+        Appender referentBuilder = this.newAppender();
+        if (parameters.size() >= 2 && parameters.get(0).getOwnedMemberFeature() != null) {
+            FeatureValue target = this.getValuation(parameters.get(0).getOwnedMemberFeature());
+            if (target != null) {
+                Appender targetBuilder = this.newAppender();
+                this.appendNonFeatureChainExpression(targetBuilder, target.getValue());
+                if (!targetBuilder.isEmpty()) {
+                    referentBuilder.append(targetBuilder.toString().trim()).append(".");
                 }
+            }
+        }
+        if (referentMembership != null) {
+            this.childrenMembershipToSkip.add(referentMembership);
+            Appender chainBuilder = this.newAppender();
+            this.appendFeatureChainMember(chainBuilder, referentMembership);
+            referentBuilder.append(chainBuilder.toString().trim());
+        }
+        builder.appendWithSpaceIfNeeded(referentBuilder);
+        builder.appendWithSpaceIfNeeded(SysMLv2Keywords.ASSIGNMENT);
+
+        if (!parameters.isEmpty() && parameters.get(parameters.size() - 1).getOwnedMemberFeature() != null) {
+            FeatureValue value = this.getValuation(parameters.get(parameters.size() - 1).getOwnedMemberFeature());
+            if (value != null) {
+                this.appendOwnedExpression(builder, value.getValue());
             }
         }
     }
