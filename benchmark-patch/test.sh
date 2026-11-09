@@ -2,7 +2,7 @@
 # Round-trip every fixture through a fresh SysON instance and validate the exports.
 #
 # Usage: benchmark-patch/test.sh
-# Env:   IMAGE (default: syson-benchmark:v2026.9.6-bp1)
+# Env:   IMAGE (default: syson-benchmark:v2026.9.6-bp2)
 #        SYSML_OTS (path to a sysml-ots checkout; its sysmlenv and tools/validate_sysml.py
 #        run the OMG Pilot validator)
 set -euo pipefail

@@ -51,7 +51,7 @@ Requires Docker and a JDK 21 `javac`. No Maven build: the changed sources are co
 JAVAC=/path/to/jdk21/bin/javac benchmark-patch/build.sh
 ```
 
-Produces the image `syson-benchmark:v2026.9.6-bp1`. To add a changed source file, list it in `PATCHED_SOURCES` in `build.sh`.
+Produces the image `syson-benchmark:v2026.9.6-bp2`. To add a changed source file, list it in `PATCHED_SOURCES` in `build.sh`.
 
 ## Test
 
@@ -65,4 +65,4 @@ SYSML_OTS=/path/to/sysml-ots benchmark-patch/test.sh
 
 ## Run
 
-Use the image in place of `eclipsesyson/syson:v2026.9.6` in the docker compose file, for example `IMAGE_TAG=syson-benchmark:v2026.9.6-bp1 docker compose up -d`.
+Use the image in place of `eclipsesyson/syson:v2026.9.6` in the docker compose file, for example `IMAGE_TAG=syson-benchmark:v2026.9.6-bp2 docker compose up -d`.

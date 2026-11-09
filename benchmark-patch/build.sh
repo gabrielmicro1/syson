@@ -8,13 +8,15 @@
 # Usage: benchmark-patch/build.sh            (from the repository root or anywhere)
 # Env:   JAVAC (default: javac on PATH; must be JDK 21)
 #        BASE_IMAGE (default: eclipsesyson/syson:v2026.9.6)
-#        IMAGE (default: syson-benchmark:v2026.9.6-bp1)
+#        IMAGE (default: syson-benchmark:v2026.9.6-bp2), built for the local platform
+#        PUSH_IMAGE (optional, e.g. ghcr.io/<owner>/syson-benchmark:v2026.9.6-bp2): also build for
+#        linux/amd64 and linux/arm64 and push to that registry tag (requires `docker login`)
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 BASE_IMAGE="${BASE_IMAGE:-eclipsesyson/syson:v2026.9.6}"
-IMAGE="${IMAGE:-syson-benchmark:v2026.9.6-bp1}"
+IMAGE="${IMAGE:-syson-benchmark:v2026.9.6-bp2}"
 JAVAC="${JAVAC:-javac}"
 WORK="$HERE/.build"
 
@@ -54,3 +56,10 @@ COPY app/syson-application.jar /syson-application.jar
 EOF
 docker build -q -t "$IMAGE" "$WORK" >/dev/null
 echo "built $IMAGE"
+
+# The patch only replaces Java bytecode, so the same application jar serves every platform of the base image.
+if [ -n "${PUSH_IMAGE:-}" ]; then
+  docker buildx inspect syson-benchmark >/dev/null 2>&1 || docker buildx create --name syson-benchmark --driver docker-container >/dev/null
+  docker buildx build --builder syson-benchmark --platform linux/amd64,linux/arm64 -t "$PUSH_IMAGE" --push "$WORK"
+  echo "pushed $PUSH_IMAGE (linux/amd64, linux/arm64)"
+fi
