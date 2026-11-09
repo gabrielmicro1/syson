@@ -18,3 +18,4 @@ accept msg : Notice via noticeIn if msg\.soc > 0\.5 then normal;
 send notice3 to this;
 then\s+decide ?;
 if receive\.cmd\.code == 1 then off1;
+attribute noFlags : Boolean = SequenceFunctions::isEmpty\(flags\) or SequenceFunctions::size\(flags\) < 2;

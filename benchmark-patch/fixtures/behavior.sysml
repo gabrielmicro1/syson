@@ -26,6 +26,7 @@ package Behavior {
         attribute guarded : Boolean = (a > b) and (b > c or c > a);
         attribute flags : Boolean[3];
         attribute second : Boolean = flags#(2) and not flags#(3);
+        attribute noFlags : Boolean = SequenceFunctions::isEmpty(flags) or SequenceFunctions::size(flags) < 2;
     }
     part def Controller {
         port obcLink : NoticePort;
