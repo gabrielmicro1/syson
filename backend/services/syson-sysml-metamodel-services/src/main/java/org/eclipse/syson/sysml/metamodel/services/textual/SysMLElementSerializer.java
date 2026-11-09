@@ -469,6 +469,24 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
         return builder.toString().trim();
     }
 
+    private boolean isThenToAnonymousNode(SuccessionAsUsage successionAsUsage, EndFeatureMembership sourceEnd) {
+        List<Feature> targets = successionAsUsage.getTargetFeature();
+        if (targets.isEmpty() || !(targets.get(0) instanceof ActionUsage target)) {
+            return false;
+        }
+        boolean anonymousTarget = target.getDeclaredName() == null && target.getDeclaredShortName() == null;
+        boolean implicitSource = this.isSuccessionUsageImplicitSource(sourceEnd) && this.isPreviousFeatureEqualsTo(successionAsUsage.getSourceFeature(), successionAsUsage,
+                m -> this.isNotSuccessionWithSameSource(m, successionAsUsage.getSourceFeature()));
+        Element owner = successionAsUsage.getOwningNamespace();
+        boolean targetFollows = false;
+        if (owner instanceof Namespace namespace) {
+            List<Membership> memberships = namespace.getOwnedMembership();
+            int index = memberships.indexOf(successionAsUsage.getOwningMembership());
+            targetFollows = index >= 0 && index + 1 < memberships.size() && memberships.get(index + 1).getMemberElement() == target;
+        }
+        return anonymousTarget && implicitSource && targetFollows;
+    }
+
     @Override
     public String caseCalculationDefinition(CalculationDefinition calculationDefinition) {
         Appender builder = this.newAppender();
@@ -1459,6 +1477,14 @@ public class SysMLElementSerializer extends SysmlSwitch<String> {
                 .map(EndFeatureMembership.class::cast)
                 .toList();
 
+
+        if (endFeatureMemberships.size() == 2 && declarationBuilder.isEmpty() && this.isThenToAnonymousNode(successionAsUsage, endFeatureMemberships.get(0))) {
+            // TargetSuccessionMember 'then' followed by an anonymous action node (e.g. 'then decide;'): the node
+            // itself is serialized next, so only the 'then' prefix is written here
+            this.childrenMembershipToSkip.addAll(endFeatureMemberships);
+            builder.appendWithSpaceIfNeeded("then");
+            return builder.toString();
+        }
 
         if (endFeatureMemberships.size() == 2) {
 

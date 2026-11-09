@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Objects;
 
 import org.eclipse.emf.ecore.EObject;
+import org.eclipse.syson.sysml.AcceptActionUsage;
 import org.eclipse.syson.sysml.Conjugation;
 import org.eclipse.syson.sysml.Connector;
 import org.eclipse.syson.sysml.Element;
@@ -35,6 +36,9 @@ import org.eclipse.syson.sysml.Namespace;
 import org.eclipse.syson.sysml.Redefinition;
 import org.eclipse.syson.sysml.ReferenceSubsetting;
 import org.eclipse.syson.sysml.Specialization;
+import org.eclipse.syson.sysml.TransitionFeatureKind;
+import org.eclipse.syson.sysml.TransitionFeatureMembership;
+import org.eclipse.syson.sysml.TransitionUsage;
 import org.eclipse.syson.sysml.Type;
 
 /**
@@ -50,7 +54,9 @@ public class DeresolvingNamespaceProvider {
         if (element instanceof Import aImport) {
             result.add(aImport.getImportOwningNamespace());
         } else if (element instanceof Membership membership) {
-            result.add(this.getDeresolvingNamespaceForMembership(membership));
+            Namespace membershipNamespace = this.getDeresolvingNamespaceForMembership(membership);
+            result.add(membershipNamespace);
+            result.addAll(this.getTransitionTriggerNamespaces(membership));
         } else if (element instanceof Redefinition redefinition) {
             result.addAll(this.getDeresolvingNamespaceForRedefinition(redefinition));
         } else if (element instanceof Specialization specialization) {
@@ -101,6 +107,30 @@ public class DeresolvingNamespaceProvider {
         }
 
         return result;
+    }
+
+    /**
+     * In a transition, the payload of the accepted item is visible to the guard and the effect (e.g. "accept msg :
+     * Msg via p if msg.ok"). The payload parameter is owned by the trigger AcceptActionUsage, so its namespace is
+     * searched after the transition itself.
+     */
+    private List<Namespace> getTransitionTriggerNamespaces(Membership membership) {
+        List<Namespace> triggers = new ArrayList<>();
+        EObject container = membership.eContainer();
+        while (container != null && !(container instanceof TransitionUsage)) {
+            container = container.eContainer();
+        }
+        if (container instanceof TransitionUsage transitionUsage) {
+            transitionUsage.getOwnedRelationship().stream()
+                    .filter(TransitionFeatureMembership.class::isInstance)
+                    .map(TransitionFeatureMembership.class::cast)
+                    .filter(transitionFeatureMembership -> transitionFeatureMembership.getKind() == TransitionFeatureKind.TRIGGER)
+                    .flatMap(transitionFeatureMembership -> transitionFeatureMembership.getOwnedRelatedElement().stream())
+                    .filter(AcceptActionUsage.class::isInstance)
+                    .map(AcceptActionUsage.class::cast)
+                    .forEach(triggers::add);
+        }
+        return triggers;
     }
 
     private Namespace getDeresolvingNamespaceForMembership(Membership membership) {

@@ -6,6 +6,7 @@ package Behavior {
     item def Notice { attribute soc : Real; }
     item def Command { attribute code : Integer; }
     port def NoticePort { out item notice : Notice; }
+    port def CommandPort { out item command : Command; }
     action def SwitchOff;
     calc def Share {
         in a : Real;
@@ -28,7 +29,8 @@ package Behavior {
     }
     part def Controller {
         port obcLink : NoticePort;
-        port cmdIn : ~NoticePort;
+        port noticeIn : ~NoticePort;
+        port cmdIn : ~CommandPort;
         attribute stateOfCharge : Real;
         attribute temperature : ThermodynamicTemperatureValue;
         attribute onBelow : ThermodynamicTemperatureValue;
@@ -46,6 +48,20 @@ package Behavior {
                 then action off : SwitchOff;
             }
         }
+        action notifySelf {
+            first start;
+            then action sendSelf send notice3 to this;
+            then done;
+            item notice3 : Notice;
+        }
+        action routeCommand {
+            action receive accept cmd : Command via cmdIn;
+            then decide;
+                if receive.cmd.code == 1 then off1;
+                if receive.cmd.code != 1 then off2;
+            action off1 : SwitchOff;
+            action off2 : SwitchOff;
+        }
         action enable {
             first start;
             then action enableIt assign enabled := true;
@@ -62,6 +78,7 @@ package Behavior {
                 }
             }
             transition first normal accept when stateOfCharge < 0.3 then shed;
+            transition recover first shed accept msg : Notice via noticeIn if msg.soc > 0.5 then normal;
         }
     }
 }

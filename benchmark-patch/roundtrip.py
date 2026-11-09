@@ -12,7 +12,7 @@ for f in files:
     ops = {"query": "mutation($input:UploadDocumentInput!){uploadDocument(input:$input){__typename ... on UploadDocumentSuccessPayload{report} ... on ErrorPayload{messages{body}}}}",
            "variables": {"input": {"id": str(uuid.uuid4()), "editingContextId": ec, "file": None, "readOnly": False}}}
     out = subprocess.run(["curl", "-s", base + "/api/graphql/upload", "-F", f"operations={json.dumps(ops)}", "-F", 'map={"0":"variables.file"}', "-F", f"0=@{f}"], capture_output=True, text=True).stdout
-    print(name, "upload:", out[:300])
+    print(name, "upload:", json.loads(out)["data"]["uploadDocument"].get("report") or "OK")
     doc = subprocess.run(["docker", "exec", db_container, "psql", "-U", "username", "-d", "postgres", "-tAc",
                           f"select id from document where semantic_data_id='{ec}' and name='{name}';"], capture_output=True, text=True).stdout.strip()
     dest = f"{out_dir}/{name.replace('.sysml', '.export.sysml')}"

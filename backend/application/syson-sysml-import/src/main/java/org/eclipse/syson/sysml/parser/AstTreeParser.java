@@ -23,10 +23,15 @@ import org.eclipse.emf.ecore.EObject;
 import org.eclipse.emf.ecore.EReference;
 import org.eclipse.emf.ecore.InternalEObject;
 import org.eclipse.syson.sysml.Element;
+import org.eclipse.syson.sysml.FeatureDirectionKind;
 import org.eclipse.syson.sysml.Import;
 import org.eclipse.syson.sysml.Membership;
+import org.eclipse.syson.sysml.ParameterMembership;
 import org.eclipse.syson.sysml.Redefinition;
+import org.eclipse.syson.sysml.ReferenceUsage;
+import org.eclipse.syson.sysml.SendActionUsage;
 import org.eclipse.syson.sysml.Specialization;
+import org.eclipse.syson.sysml.SysmlFactory;
 import org.eclipse.syson.sysml.SysmlPackage;
 import org.eclipse.syson.sysml.metamodel.helper.EMFUtils;
 import org.eclipse.syson.sysml.parser.translation.EClassifierTranslator;
@@ -117,6 +122,33 @@ public class AstTreeParser {
      *            the {@link EObject} to fill
      */
     private void fillElementWith(final JsonNode astJson, final EObject eObject) {
+        this.fillElementWithProperties(astJson, eObject);
+        this.keepSendActionArgumentPositions(astJson, eObject);
+    }
+
+    /**
+     * Keeps the receiver of "send x to y" in third position. The AST has no sender ("via") for it, so an empty
+     * sender parameter is inserted; otherwise the receiver would take the sender's position and be read as "via y".
+     */
+    private void keepSendActionArgumentPositions(final JsonNode astJson, final EObject eObject) {
+        if (eObject instanceof SendActionUsage sendActionUsage && astJson.has("receiver") && !astJson.has("sender")) {
+            long parameterCount = sendActionUsage.getOwnedRelationship().stream().filter(ParameterMembership.class::isInstance).count();
+            if (parameterCount == 2) {
+                ParameterMembership emptySender = SysmlFactory.eINSTANCE.createParameterMembership();
+                ReferenceUsage emptySenderParameter = SysmlFactory.eINSTANCE.createReferenceUsage();
+                emptySenderParameter.setDirection(FeatureDirectionKind.IN);
+                emptySender.getOwnedRelatedElement().add(emptySenderParameter);
+                int receiverIndex = sendActionUsage.getOwnedRelationship().indexOf(sendActionUsage.getOwnedRelationship().stream()
+                        .filter(ParameterMembership.class::isInstance)
+                        .skip(1)
+                        .findFirst()
+                        .orElseThrow());
+                sendActionUsage.getOwnedRelationship().add(receiverIndex, emptySender);
+            }
+        }
+    }
+
+    private void fillElementWithProperties(final JsonNode astJson, final EObject eObject) {
         astJson.propertyStream().forEach(node -> {
             var key = node.getKey();
             // Ignore meta information

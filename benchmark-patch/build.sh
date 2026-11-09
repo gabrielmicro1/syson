@@ -20,8 +20,8 @@ WORK="$HERE/.build"
 
 # source root : nested jar name prefix : space-separated source files (relative to the root)
 PATCHED_SOURCES=(
-  "backend/services/syson-sysml-metamodel-services/src/main/java:syson-sysml-metamodel-services:org/eclipse/syson/sysml/metamodel/services/textual/SysMLElementSerializer.java org/eclipse/syson/sysml/metamodel/services/textual/utils/SysMLKeywordSwitch.java"
-  "backend/application/syson-sysml-import/src/main/java:syson-sysml-import:org/eclipse/syson/sysml/parser/translation/EAttributeTranslator.java"
+  "backend/services/syson-sysml-metamodel-services/src/main/java:syson-sysml-metamodel-services:org/eclipse/syson/sysml/metamodel/services/textual/SysMLElementSerializer.java org/eclipse/syson/sysml/metamodel/services/textual/utils/SysMLKeywordSwitch.java org/eclipse/syson/sysml/metamodel/helper/DeresolvingNamespaceProvider.java org/eclipse/syson/sysml/metamodel/services/textual/utils/FileNameDeresolver.java"
+  "backend/application/syson-sysml-import/src/main/java:syson-sysml-import:org/eclipse/syson/sysml/parser/translation/EAttributeTranslator.java org/eclipse/syson/sysml/parser/AstTreeParser.java"
 )
 
 rm -rf "$WORK" && mkdir -p "$WORK/app"

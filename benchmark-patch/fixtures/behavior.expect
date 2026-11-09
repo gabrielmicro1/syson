@@ -14,3 +14,7 @@ attribute mixed : Real = a \* b \+ c;
 attribute chained : Real = a \+ b \+ c;
 attribute guarded : Boolean = a > b and \(b > c or c > a\);
 attribute second : Boolean = flags#\(2\) and not flags#\(3\);
+accept msg : Notice via noticeIn if msg\.soc > 0\.5 then normal;
+send notice3 to this;
+then\s+decide ?;
+if receive\.cmd\.code == 1 then off1;

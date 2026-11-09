@@ -299,7 +299,9 @@ public class FileNameDeresolver implements INameDeresolver {
         final String qn;
         Element importedElement = m.getMemberElement();
         String importedElementQualifiedName = this.getQualifiedName(importedElement);
-        if (importedElement != element && !importedElementQualifiedName.isEmpty()) {
+        // The element's qualified name may not extend the imported element's one, e.g. for a feature owned by an
+        // anonymous namespace (the payload of an unnamed accept action), whose qualified name is just its name
+        if (importedElement != element && !importedElementQualifiedName.isEmpty() && elementQn.startsWith(importedElementQualifiedName + "::")) {
             int partToRemove = importedElementQualifiedName.length() + 2;
             qn = new NameHelper().toPrintableName(importedElement.getName()) + "::" + elementQn.substring(partToRemove);
         } else {
